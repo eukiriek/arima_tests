@@ -354,3 +354,71 @@ plt.show()
 forecast = pd.Series(forecast.values, index=test.index, name="forecast")
 print (forecast)
 
+
+
+
+
+import warnings, numpy as np, pandas as pd, optuna
+import matplotlib.pyplot as plt
+from statsmodels.tsa.arima.model import ARIMA
+warnings.filterwarnings("ignore")
+
+# ========= 1) ДАННЫЕ =========
+df = pd.read_excel("test.xlsx")                 # ваш файл
+df["DATE"]  = pd.to_datetime(df["DATE"], dayfirst=True, errors="coerce")
+df["TOTAL"] = pd.to_numeric(df["TOTAL"], errors="coerce")
+df = df.dropna(subset=["DATE","TOTAL"]).sort_values("DATE").set_index("DATE")
+
+# частота ряда (важно для корректного прогноза)
+freq = pd.infer_freq(df.index)
+if freq is None:                                # подставьте при необходимости
+    freq = "MS"                                 # месяцы с начала месяца: MS | конец месяца: M
+s = df["TOTAL"].asfreq(freq).interpolate()
+
+# тестовый горизонт = 12 последних точек
+TEST_STEPS = min(12, max(1, len(s)//5))         # если ряд короткий, берём 20%
+train, test = s.iloc[:-TEST_STEPS], s.iloc[-TEST_STEPS:]
+
+# ========= 2) ЦЕЛЕВАЯ ФУНКЦИЯ =========
+def mape(y_true, y_pred):
+    y_true = np.array(y_true, dtype=float)
+    y_pred = np.array(y_pred, dtype=float)
+    eps = 1e-9
+    return np.mean(np.abs((y_true - y_pred) / np.clip(np.abs(y_true), eps, None))) * 100
+
+def objective(trial):
+    # узкие, но практичные диапазоны (чтобы меньше «падало» по линалгу)
+    p = trial.suggest_int("p", 0, 4)
+    d = trial.suggest_int("d", 0, 2)
+    q = trial.suggest_int("q", 0, 4)
+
+    try:
+        model = ARIMA(train, order=(p,d,q),
+                      enforce_stationarity=False, enforce_invertibility=False)
+        res = model.fit()
+        fc = res.get_forecast(steps=len(test)).predicted_mean
+        return mape(test, fc)
+    except Exception:
+        # неустойчивая модель — даём большой штраф
+        return 1e9
+
+# ========= 3) ОПТИМИЗАЦИЯ =========
+study = optuna.create_study(direction="minimize")
+study.optimize(objective, n_trials=50, show_progress_bar=True)
+
+best_params = study.best_params
+best_mape   = study.best_value
+print(f"Лучшие параметры: {best_params}, MAPE на валидации: {best_mape:.2f}%")
+
+# ========= 4) ФИНАЛЬНАЯ МОДЕЛЬ НА ВСЁМ РЯДЕ + ПРОГНОЗ 12 =========
+p, d, q = best_params["p"], best_params["d"], best_params["q"]
+final = ARIMA(s, order=(p,d,q),
+              enforce_stationarity=False, enforce_invertibility=False).fit()
+
+future = final.get_forecast(steps=12)
+yhat   = future.predicted_mean
+ci     = future.conf_int()
+
+print("\nПрогноз на 12 периодов:")
+print(yha
+
