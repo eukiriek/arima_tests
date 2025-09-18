@@ -61,3 +61,13 @@ ci     = future.conf_int()
 
 print("\nПрогноз на 12 периодов:")
 print(yha
+
+
+# ========= 5) ВИЗУАЛИЗАЦИЯ =========
+plt.figure(figsize=(12,6))
+plt.plot(s.index, s, label="Факт")
+plt.plot(yhat.index, yhat, label=f"Прогноз 12 мес (ARIMA{p,d,q})", linewidth=2)
+plt.fill_between(ci.index, ci.iloc[:,0], ci.iloc[:,1], alpha=0.2, label="95% CI")
+plt.title(f"Optuna + ARIMA{p,d,q}. Валидационный MAPE: {best_mape:.2f}%")
+plt.xlabel("Дата"); plt.ylabel("TOTAL"); plt.legend(); plt.grid(True, linestyle="--", alpha=0.6)
+plt.show()
