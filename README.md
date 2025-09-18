@@ -44,3 +44,47 @@ plt.show()
 
 # (опционально) сохранить в CSV
 # pd.DataFrame({"actual": s, "forecast": yhat}).to_csv("forecast_12.csv", encoding="utf-8-sig")
+
+
+
+новый
+
+import numpy as np
+
+# ---- параметры ограничения ----
+CAP = 1000          # <<< ваш порог (константа)
+HALF_YEAR = 6       # полгода (в шагах прогноза)
+
+# базовый прогноз
+yhat = fc.predicted_mean.copy()
+ci = fc.conf_int()
+
+# ---- логика "упёрся в константу" ----
+reached = (yhat >= CAP).values
+yhat_capped = yhat.copy()
+
+if reached.any():
+    first_hit_pos = int(np.argmax(reached))  # позиция первого превышения
+    if first_hit_pos < HALF_YEAR:
+        # если достигли порога в первые 6 месяцев — дальше плоско на CAP
+        yhat_capped.iloc[first_hit_pos:] = CAP
+    else:
+        # если порог достигнут позже 6 мес — просто не даём превысить CAP
+        yhat_capped = yhat_capped.clip(upper=CAP)
+else:
+    # порог в горизонте не достигнут — на всякий случай не превышаем порог
+    yhat_capped = yhat_capped.clip(upper=CAP)
+
+# ---- печать и график с ограничением ----
+print("\nПрогноз (c ограничением):")
+print(yhat_capped)
+
+plt.figure(figsize=(12,6))
+plt.plot(s.index, s.values, label="Факт")
+plt.plot(yhat.index, yhat_capped.values, label=f"Прогноз 12 (cap={CAP})", linewidth=2)
+plt.fill_between(ci.index, ci.iloc[:,0].clip(upper=CAP), ci.iloc[:,1].clip(upper=CAP),
+                 alpha=0.2, label="95% CI (с cap)")
+plt.title(f"ARIMA({p},{d},{q}) — прогноз с ограничением на уровень {CAP}")
+plt.xlabel("Дата"); plt.ylabel("TOTAL")
+plt.legend(); plt.grid(True, linestyle="--", alpha=0.6)
+plt.show()
