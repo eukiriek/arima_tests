@@ -1,28 +1,45 @@
-def mape(y_true, y_pred):
-    # защита от деления на ноль
-    denom = np.where(np.abs(y_true) < 1e-12, 1e-12, np.abs(y_true))
-    return np.mean(np.abs((y_true - y_pred) / denom)) * 100
 
-def evaluate_and_plot(model_name, fit_obj, forecast, color_actual='black'):
-    mae = mean_absolute_error(test['value'], forecast)
-    rmse = mean_squared_error(test['value'], forecast, squared=False)
-    mp = mape(test['value'].values, forecast.values)
-    print(f"{model_name} -> MAE={mae:.3f}, RMSE={rmse:.3f}, MAPE={mp:.2f}%")
+import pandas as pd
+import numpy as np
+from statsmodels.tsa.holtwinters import ExponentialSmoothing
+from statsmodels.tsa.arima.model import ARIMA
 
-    plt.figure(figsize=(10,4))
-    plt.plot(train.index, train['value'], label='train')
-    plt.plot(test.index,  test['value'],  label='test', linewidth=2)
-    plt.plot(test.index,  forecast,       label=f'{model_name} forecast', linestyle='--')
-    plt.title(f'{model_name}: прогноз на {h} шагов')
-    plt.legend()
-    plt.tight_layout()
-    plt.show()
+# Пример данных
+df = pd.read_excel('turnover_drp.xlsx')
+df['date'] = pd.to_datetime(df['date'])
+df = df.set_index('date')
 
-# Оценим SES
-evaluate_and_plot("SES", ses_fit, ses_forecast)
+# Делим ряд
+train = df['turnover'][:-12]
+test = df['turnover'][-12:]
 
-# Оценим Holt
-evaluate_and_plot("Holt", holt_fit, holt_forecast)
+# 1. Экспоненциальное сглаживание
+es_model = ExponentialSmoothing(train, trend='add', seasonal='add', seasonal_periods=12)
+es_fit = es_model.fit()
+es_forecast = es_fit.forecast(len(test))
 
-# (Опционально) Holt-Winters
-# evaluate_and_plot("Holt-Winters", hw_fit, hw_forecast)
+# 2. Остатки
+residuals = train - es_fit.fittedvalues
+
+# 3. ARIMA на остатках
+arima_model = ARIMA(residuals, order=(1,0,0))  # можно подобрать p,d,q
+arima_fit = arima_model.fit()
+
+# Прогноз ошибок
+arima_forecast = arima_fit.forecast(len(test))
+
+# 4. Комбинированный прогноз
+hybrid_forecast = es_forecast + arima_forecast
+
+# 5. Сравнение
+comparison = pd.DataFrame({
+    'Actual': test,
+    'ES Forecast': es_forecast,
+    'Hybrid Forecast': hybrid_forecast
+})
+
+from sklearn.metrics import mean_absolute_percentage_error
+mape_es = mean_absolute_percentage_error(test, es_forecast) * 100
+mape_hybrid = mean_absolute_percentage_error(test, hybrid_forecast) * 100
+
+print(f"MAPE ES: {mape_es:.2f}% | MAPE Hybrid: {mape_hybrid:.2f}%")
