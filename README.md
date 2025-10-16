@@ -1,3 +1,7 @@
+t_train = np.arange(len(train)).reshape(-1, 1)
+t_test  = np.arange(len(train), len(
+
+
 # === 1) Остатки на обучении (in-sample) ===
 yhat_train = linreg.predict(t_train)
 residuals_train = train['value'].values - yhat_train
