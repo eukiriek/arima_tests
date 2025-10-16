@@ -1,6 +1,7 @@
 t_train = np.arange(len(train)).reshape(-1, 1)
 t_test  = np.arange(len(train), len(
-
+t_train = np.arange(len(train)).reshape(-1, 1)
+t_test  = np.arange(len(train), len(train) + len(test)).reshape(-1, 1)
 
 # === 1) Остатки на обучении (in-sample) ===
 yhat_train = linreg.predict(t_train)
